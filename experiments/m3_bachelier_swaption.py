@@ -91,6 +91,13 @@ def main(quick=False, out_dir="results"):
                      title=f"1y x 5y payer swaption, K = 3%, vol = 100bp, "
                            f"{size} training samples")
 
+    # how noisy are the pathwise labels? noise is the gap between each label
+    # and the true Greek at the same inputs, measured on the last training set
+    _, label_delta, label_vega = closed_form(x)
+    for greek, label, true in [("delta", dydx[:, 0], label_delta), ("vega", dydx[:, 1], label_vega)]:
+        noise_to_signal = np.sqrt(np.mean((label - true) ** 2) / np.mean(true**2))
+        print(f"pathwise {greek} labels: rms noise / rms true value = {noise_to_signal:.2f}")
+
     print(f"annuity = {ANNUITY:.4f}")
     print_table(rows)
     write_csv(rows, out_dir / "m3_rmse.csv")

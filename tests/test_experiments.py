@@ -42,3 +42,14 @@ def test_m4_runs(tmp_path):
     for name in ["m4_rmse.csv", "m4_dv01_rmse_by_pillar.csv", "m4_timing.csv",
                  "m4_validation.csv", "m4_dv01_profiles.png"]:
         assert (tmp_path / name).exists()
+
+
+def test_robustness_checks_run(tmp_path):
+    run_quick("robustness_checks.py", tmp_path)
+    assert (tmp_path / "robustness_checks.csv").exists()
+
+
+def test_run_all_runs(tmp_path):
+    run_quick("run_all.py", tmp_path)
+    assert (tmp_path / "m1_rmse.csv").exists()
+    assert (tmp_path / "robustness_checks.csv").exists()

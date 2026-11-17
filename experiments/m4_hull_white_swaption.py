@@ -105,6 +105,8 @@ def main(quick=False, out_dir="results"):
                 "model": name,
                 "price_rmse_bp": rmse(price, true_price) * 1e4,
                 "dv01_rmse_bp": rmse(dv01, true_dv01),
+                # sum over pillars, i.e. the sensitivity to a parallel shift
+                "parallel_dv01_rmse_bp": rmse(dv01.sum(1), true_dv01.sum(1)),
                 "train_seconds": round(seconds, 1),
             })
             pillar_rows.append({"n_train": size, "model": name,
@@ -115,6 +117,9 @@ def main(quick=False, out_dir="results"):
         if size == sizes[-1]:
             timing = time_network(model, x_test, bump_seconds)
 
+    corr = np.corrcoef(x[:, 3], x[:, 6])[0, 1]
+    print(f"\ncorrelation of the 5y and 15y pillars in the training curves: {corr:.2f}")
+    print(f"mean |parallel DV01| on the test curves: {np.abs(true_dv01.sum(1)).mean():.2f} bp")
     print(f"\nprice RMSE and DV01 RMSE, both in bp of notional ({n_test} test curves):")
     print_table(rows)
     print("\nDV01 RMSE by pillar:")
