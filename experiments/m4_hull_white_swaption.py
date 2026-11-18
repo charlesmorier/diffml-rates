@@ -1,4 +1,4 @@
-"""M4: 5y x 10y payer swaption under Hull-White, with pillar DV01s.
+"""M4: 5y x 10y swaption under Hull-White, with pillar DV01s.
 
 Inputs are the 10 zero rates of a randomly perturbed curve. The network learns
 the price and, through its input gradient, all 10 pillar DV01s at once.
@@ -9,6 +9,7 @@ bump-and-reprice DV01s) against a 2 million path Monte Carlo.
     python experiments/m4_hull_white_swaption.py
     python experiments/m4_hull_white_swaption.py --quick
 """
+# Not in the paper: M4 extension. Closest is Section 2.3, a real book of swaps and swaptions
 import argparse
 import time
 from pathlib import Path
@@ -23,24 +24,25 @@ from diffml.analytics.hull_white import (
     bumped_dv01,
     jamshidian_price,
 )
-from diffml.data.curves import BASE_ZEROS, PILLAR_NAMES, sample_curves
+from diffml.data.curves import BASE_CURVE, PILLAR_NAMES, sample_curves
 from diffml.data.hull_white_swaption import monte_carlo, simulate_hw_swaption
 from diffml.evaluate import print_table, rmse, write_csv
 from diffml.train import train
 from diffml.utils import set_seed
 
 MODEL = HullWhite(a=0.03, sigma=0.01)
-SWAPTION = Swaption(expiry=5.0, tenor=10.0, strike=atm_strike(BASE_ZEROS, 5.0, 10.0))
+W = 1  # 1 for a payer, -1 for a receiver
+SWAPTION = Swaption(T=5.0, tenor=10.0, K=atm_strike(BASE_CURVE, 5.0, 10.0), w=W)
 TEST_CURVE_SCALE = 0.8  # test curves sit inside the training distribution
 
 
 def validate_benchmark(curves, n_paths, rng):
     """Compare Jamshidian and bumped DV01s with Monte Carlo. Stops the run if they disagree."""
     rows = []
-    for k, zeros in enumerate(curves):
-        price = jamshidian_price(zeros, SWAPTION, MODEL)
-        dv01 = bumped_dv01(zeros, SWAPTION, MODEL)
-        mc_price, mc_se, mc_dv01, mc_dv01_se = monte_carlo(zeros, SWAPTION, MODEL, n_paths, rng)
+    for k, this_curve in enumerate(curves):
+        price = jamshidian_price(this_curve, SWAPTION, MODEL)
+        dv01 = bumped_dv01(this_curve, SWAPTION, MODEL)
+        mc_price, mc_se, mc_dv01, mc_dv01_se = monte_carlo(this_curve, SWAPTION, MODEL, n_paths, rng)
 
         price_z = abs(price - mc_price) / mc_se
         # only pillars with a non-zero DV01 have a standard error to compare against
@@ -74,8 +76,8 @@ def main(quick=False, out_dir="results"):
     x_test = sample_curves(n_test, test_rng, scale=TEST_CURVE_SCALE)
 
     # 1. check the benchmark on the base curve and two test curves
-    print(f"strike = {SWAPTION.strike:.4%}")
-    validation = validate_benchmark([BASE_ZEROS, x_test[0], x_test[1]], n_mc_paths,
+    print(f"strike = {SWAPTION.K:.4%}")
+    validation = validate_benchmark([BASE_CURVE, x_test[0], x_test[1]], n_mc_paths,
                                     np.random.default_rng(7))
     print("benchmark validation against Monte Carlo:")
     print_table(validation)
@@ -167,7 +169,7 @@ def plot_profiles(true_dv01, profiles, size, path, curves=(0, 1, 2)):
         ax.set_xlabel("pillar")
     axes[0].set_ylabel("DV01 (bp of notional per bp)")
     axes[0].legend()
-    fig.suptitle(f"5y x 10y payer swaption, Hull-White, {size} training samples")
+    fig.suptitle(f"5y x 10y {'payer' if W == 1 else 'receiver'} swaption, Hull-White, {size} training samples")
     fig.tight_layout()
     fig.savefig(path, dpi=120)
     plt.close(fig)

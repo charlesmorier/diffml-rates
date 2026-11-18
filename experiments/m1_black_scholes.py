@@ -1,4 +1,4 @@
-"""M1: European call under Black-Scholes, standard vs differential network.
+"""M1: European option under Black-Scholes, standard vs differential network.
 
 Trains both networks on 1k, 4k, 16k and 64k simulated samples and measures the
 price and delta error against the closed form on a grid of spots.
@@ -6,14 +6,15 @@ price and delta error against the closed form on a grid of spots.
     python experiments/m1_black_scholes.py
     python experiments/m1_black_scholes.py --quick   # tiny run for the smoke test
 """
+# Paper, Appendix 1: Black-Scholes call example (replication, parameters are ours)
 import argparse
 import time
 from pathlib import Path
 
 import numpy as np
 
-from diffml.analytics.black_scholes import bs_call_delta, bs_call_price
-from diffml.data.black_scholes import simulate_call
+from diffml.analytics.black_scholes import bs_delta, bs_price
+from diffml.data.black_scholes import simulate_option
 from diffml.evaluate import plot_fit, print_table, rmse, write_csv
 from diffml.train import train
 from diffml.utils import set_seed
@@ -21,6 +22,7 @@ from diffml.utils import set_seed
 STRIKE = 100.0
 VOL = 0.2
 EXPIRY = 1.0
+W = 1  # 1 for a call, -1 for a put
 
 # train on a slightly wider range than we test on, so the test grid
 # doesn't sit right on the edge of the training data
@@ -41,13 +43,13 @@ def main(quick=False, out_dir="results"):
         n_steps = 4000
 
     x_test = np.linspace(TEST_LOW, TEST_HIGH, 201)[:, None]
-    true_price = bs_call_price(x_test, STRIKE, VOL, EXPIRY)
-    true_delta = bs_call_delta(x_test, STRIKE, VOL, EXPIRY)
+    true_price = bs_price(x_test, STRIKE, VOL, EXPIRY, w=W)
+    true_delta = bs_delta(x_test, STRIKE, VOL, EXPIRY, w=W)
 
     rows = []
     for size in sizes:
         rng = np.random.default_rng(size)
-        x, y, dydx = simulate_call(size, rng, STRIKE, VOL, EXPIRY,
+        x, y, dydx = simulate_option(size, rng, STRIKE, VOL, EXPIRY, w=W,
                                    spot_low=TRAIN_LOW, spot_high=TRAIN_HIGH)
 
         fits = {}
@@ -71,7 +73,7 @@ def main(quick=False, out_dir="results"):
             plot_fit(x_test, truth, fits,
                      out_dir / "m1_fit_small.png", x_train=x, y_train=y,
                      xlabel="spot S0",
-                     title=f"Black-Scholes call, K={STRIKE:g}, {size} training samples")
+                     title=f"Black-Scholes {'call' if W == 1 else 'put'}, K={STRIKE:g}, {size} training samples")
 
     print_table(rows)
     write_csv(rows, out_dir / "m1_rmse.csv")

@@ -1,4 +1,4 @@
-"""M2: call on a Bachelier basket, standard vs differential network by dimension.
+"""M2: option on a Bachelier basket, standard vs differential network by dimension.
 
 The paper's claim is that the benefit of training on differentials grows with
 the number of inputs, because each sample carries n derivative labels on top
@@ -7,6 +7,7 @@ of one value label. We test n = 1, 7 and 20.
     python experiments/m2_bachelier_basket.py
     python experiments/m2_bachelier_basket.py --quick
 """
+# Paper, Section 2.1: 7-asset Bachelier basket, 1k vs 64k samples (we add 1 and 20 assets)
 import argparse
 import time
 from pathlib import Path
@@ -20,6 +21,7 @@ from diffml.train import train
 from diffml.utils import set_seed
 
 N_TEST = 4096
+W = 1  # 1 for a call on the basket, -1 for a put
 
 
 def main(quick=False, out_dir="results"):
@@ -34,7 +36,7 @@ def main(quick=False, out_dir="results"):
 
     rows = []
     for n_assets in dims:
-        basket = make_basket(n_assets, seed=n_assets)
+        basket = make_basket(n_assets, seed=n_assets, w=W)
 
         test_rng = np.random.default_rng(10_000 + n_assets)
         x_test = sample_spots(basket, N_TEST, test_rng)
@@ -77,17 +79,17 @@ def main(quick=False, out_dir="results"):
     return rows
 
 
-def plot_price_vs_basket(basket, x_test, true_price, prices, size, path):
+def plot_price_vs_basket(this_basket, x_test, true_price, prices, size, path):
     """Predicted price against basket value. A perfect fit lies on one curve,
     since the true price only depends on the basket value."""
-    b = basket.basket_value(x_test)
+    b = this_basket.basket_value(x_test)
     order = np.argsort(b)
 
     fig, axes = plt.subplots(1, 2, figsize=(11, 4.2), sharey=True)
     for ax, (name, price) in zip(axes, prices.items()):
         ax.scatter(b, price, s=3, alpha=0.4, label="network")
         ax.plot(b[order], true_price[order], "k-", lw=1.5, label="analytic")
-        ax.set_title(f"{name}, {basket.n_assets} assets, {size} samples")
+        ax.set_title(f"{name}, {this_basket.n_assets} assets, {size} samples")
         ax.set_xlabel("basket value")
         ax.legend()
     axes[0].set_ylabel("price")

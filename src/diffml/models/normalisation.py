@@ -1,6 +1,7 @@
 import torch
 
 
+# Paper, Section 2: networks are trained on normalised data
 class Normaliser:
     """Standardise inputs and outputs, and rescale the differentials to match.
 

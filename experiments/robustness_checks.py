@@ -1,16 +1,17 @@
 """Checks behind the caveats in the README.
 
-The main experiments train every network for a fixed 4000 steps and use one
-seed per training size. This script measures what that choice does at 1000
-training samples, on the M2 basket (7 assets) and the M3 swaption:
+The main experiments use early stopping on a 20% validation set and one seed
+per training size. This script measures, at 1000 training samples, on the M2
+basket (7 assets) and the M3 swaption:
 
 - how much the result moves between seeds
-- how much the standard network improves if it is trained for 1000 steps
-  instead of 4000 (with 1000 samples, 4000 steps is about 1000 passes over
-  the data, and it starts to fit the noise in the payoffs)
+- what early stopping does, against a fixed 4000 steps on all the data
+  (with 1000 samples, 4000 steps is about 1000 passes over the data, and the
+  networks start to fit the noise in the payoffs)
 
     python experiments/robustness_checks.py
 """
+# Paper, Section 2.1 uses early stopping; this checks what it changes here
 import argparse
 from pathlib import Path
 
@@ -22,18 +23,20 @@ from diffml.evaluate import print_table, rmse, write_csv
 from diffml.train import train
 from diffml.utils import set_seed
 
+import m2_bachelier_basket as m2
 import m3_bachelier_swaption as m3
 
+# (model, lambda, training, validation fraction)
 SETTINGS = [
-    ("standard", 0.0, 4000),
-    ("standard", 0.0, 1000),
-    ("differential", 1.0, 4000),
-    ("differential", 1.0, 1000),
+    ("standard", 0.0, "early stopping", 0.2),
+    ("standard", 0.0, "fixed 4000 steps", 0.0),
+    ("differential", 1.0, "early stopping", 0.2),
+    ("differential", 1.0, "fixed 4000 steps", 0.0),
 ]
 
 
 def basket_problem():
-    basket = make_basket(7, seed=7)
+    basket = make_basket(7, seed=7, w=m2.W)
     x_test = sample_spots(basket, 4096, np.random.default_rng(10_007))
     truth = basket.delta(x_test)
 
@@ -52,7 +55,7 @@ def swaption_problem():
     _, true_delta, _ = m3.closed_form(x_test)
 
     def simulate(n, rng):
-        return simulate_swaption(n, rng, m3.STRIKE, m3.EXPIRY, m3.ANNUITY,
+        return simulate_swaption(n, rng, m3.STRIKE, m3.EXPIRY, m3.ANNUITY, m3.W,
                                  m3.TRAIN_FORWARDS, m3.TRAIN_VOLS)
 
     def delta_error(grad):
@@ -67,22 +70,22 @@ def main(quick=False, out_dir="results"):
     set_seed(42)
 
     n_train, n_seeds = (256, 2) if quick else (1000, 5)
-    step_scale = 0.02 if quick else 1.0
+    n_steps = 50 if quick else 4000
 
     rows = []
     for problem, simulate, x_test, delta_error in [basket_problem(), swaption_problem()]:
-        for name, lambda_, n_steps in SETTINGS:
+        for name, lambda_, training, val_fraction in SETTINGS:
             errors = []
             for seed in range(n_seeds):
                 x, y, dydx = simulate(n_train, np.random.default_rng(500 + seed))
-                model = train(x, y, dydx, lambda_=lambda_,
-                              n_steps=int(n_steps * step_scale), seed=seed)
+                model = train(x, y, dydx, lambda_=lambda_, n_steps=n_steps,
+                              seed=seed, val_fraction=val_fraction)
                 _, grad = model.predict(x_test)
                 errors.append(delta_error(grad))
             rows.append({
                 "problem": problem,
                 "model": name,
-                "n_steps": n_steps,
+                "training": training,
                 "delta_rmse_mean": float(np.mean(errors)),
                 "delta_rmse_min": float(np.min(errors)),
                 "delta_rmse_max": float(np.max(errors)),

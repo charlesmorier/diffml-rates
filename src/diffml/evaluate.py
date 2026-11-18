@@ -14,7 +14,6 @@ def rmse(pred, true):
 
 
 def write_csv(rows, path):
-    """rows is a list of dicts with the same keys."""
     with open(path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
         writer.writeheader()
@@ -36,7 +35,6 @@ def _fmt(v):
 
 
 def plot_rmse_by_size(sizes, curves, ax, title=None, ylabel="RMSE"):
-    """Log-log plot of error against training size. curves maps label -> errors."""
     for label, errors in curves.items():
         ax.loglog(sizes, errors, "o-", label=label)
     ax.set_xlabel("training samples")
@@ -49,13 +47,6 @@ def plot_rmse_by_size(sizes, curves, ax, title=None, ylabel="RMSE"):
 
 def plot_fit(x_test, truth, predictions, path, x_train=None, y_train=None,
              xlabel="spot", title=None):
-    """One panel per quantity (price, delta, ...) against the analytic answer.
-
-    truth maps a name to the analytic values on x_test, e.g. {"price": ..., "delta": ...}.
-    predictions maps a model label to a dict with the same keys.
-    The first panel is assumed to be the price, and gets the training payoffs
-    in the background if x_train is given.
-    """
     names = list(truth.keys())
     fig, axes = plt.subplots(1, len(names), figsize=(5.5 * len(names), 4.2))
 

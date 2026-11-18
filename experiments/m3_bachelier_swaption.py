@@ -1,4 +1,4 @@
-"""M3: European payer swaption under Bachelier, standard vs differential network.
+"""M3: European swaption under Bachelier, standard vs differential network.
 
 Two inputs, the forward swap rate and the normal vol, so the network learns
 the price, delta and vega together.
@@ -6,6 +6,7 @@ the price, delta and vega together.
     python experiments/m3_bachelier_swaption.py
     python experiments/m3_bachelier_swaption.py --quick
 """
+# Not in the paper: M3 extension, first rates product
 import argparse
 import time
 from pathlib import Path
@@ -27,6 +28,7 @@ STRIKE = 0.03
 EXPIRY = 1.0
 TENOR = 5.0
 ANNUITY = flat_annuity(0.03, EXPIRY, TENOR)
+W = 1  # 1 for a payer, -1 for a receiver
 
 TRAIN_FORWARDS, TRAIN_VOLS = (0.0, 0.06), (0.004, 0.016)
 TEST_FORWARDS, TEST_VOLS = (0.005, 0.055), (0.005, 0.015)
@@ -34,10 +36,10 @@ PLOT_VOL = 0.01
 
 
 def closed_form(x):
-    forward, vol = x[:, 0], x[:, 1]
-    args = (STRIKE, vol, EXPIRY, ANNUITY)
-    return (swaption_price(forward, *args), swaption_delta(forward, *args),
-            swaption_vega(forward, *args))
+    F, vol = x[:, 0], x[:, 1]
+    args = (STRIKE, vol, EXPIRY, ANNUITY, W)
+    return (swaption_price(F, *args), swaption_delta(F, *args),
+            swaption_vega(F, *args))
 
 
 def main(quick=False, out_dir="results"):
@@ -63,7 +65,7 @@ def main(quick=False, out_dir="results"):
     rows = []
     for size in sizes:
         rng = np.random.default_rng(size)
-        x, y, dydx = simulate_swaption(size, rng, STRIKE, EXPIRY, ANNUITY,
+        x, y, dydx = simulate_swaption(size, rng, STRIKE, EXPIRY, ANNUITY, W,
                                        TRAIN_FORWARDS, TRAIN_VOLS)
         fits = {}
         for name, lambda_ in [("standard", 0.0), ("differential", 1.0)]:
@@ -88,7 +90,7 @@ def main(quick=False, out_dir="results"):
             truth = {"price": slice_price, "delta": slice_delta, "vega": slice_vega}
             plot_fit(slice_forwards, truth, fits, out_dir / "m3_fit_small.png",
                      x_train=x[:, 0], y_train=y, xlabel="forward swap rate",
-                     title=f"1y x 5y payer swaption, K = 3%, vol = 100bp, "
+                     title=f"1y x 5y {'payer' if W == 1 else 'receiver'} swaption, K = 3%, vol = 100bp, "
                            f"{size} training samples")
 
     # how noisy are the pathwise labels? noise is the gap between each label

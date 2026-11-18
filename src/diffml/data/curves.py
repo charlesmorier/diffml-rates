@@ -4,6 +4,7 @@ Discount factors use linear interpolation on zero rates, held flat outside the
 pillars. The same function works on numpy arrays (for the closed-form
 benchmark) and on torch tensors (so autograd can give pillar sensitivities).
 """
+# Not in the paper: M4 curve inputs
 import numpy as np
 import torch
 
@@ -11,7 +12,7 @@ PILLARS = np.array([1.0, 2.0, 3.0, 5.0, 7.0, 10.0, 15.0, 20.0, 25.0, 30.0])
 PILLAR_NAMES = ["1y", "2y", "3y", "5y", "7y", "10y", "15y", "20y", "25y", "30y"]
 
 # upward sloping, about 3.1% at 1y to 4.0% at 30y
-BASE_ZEROS = 0.03 + 0.01 * (1.0 - np.exp(-PILLARS / 8.0))
+BASE_CURVE = 0.03 + 0.01 * (1.0 - np.exp(-PILLARS / 8.0))
 
 # shapes of the three curve shocks
 PARALLEL = np.ones_like(PILLARS)
@@ -30,7 +31,7 @@ def sample_curves(n, rng, scale=1.0):
     factors = rng.standard_normal((n, 3)) * np.array([PARALLEL_SD, SLOPE_SD, CURVATURE_SD])
     shapes = np.vstack([PARALLEL, SLOPE, CURVATURE])
     noise = rng.standard_normal((n, len(PILLARS))) * NOISE_SD
-    return BASE_ZEROS + scale * (factors @ shapes + noise)
+    return BASE_CURVE + scale * (factors @ shapes + noise)
 
 
 def _interp_weights(times):
@@ -43,18 +44,18 @@ def _interp_weights(times):
     return lower, upper, weight, times
 
 
-def discount_factors(zeros, times):
+def discount_factors(this_curves, times):
     """Discount factors P(0, t), shape (n_curves, n_times).
 
-    zeros is (n_curves, 10), numpy or torch.
+    this_curves holds zero rates, shape (n_curves, 10), numpy or torch.
     """
     lower, upper, weight, times = _interp_weights(times)
-    if torch.is_tensor(zeros):
-        weight = torch.as_tensor(weight, dtype=zeros.dtype)
-        times = torch.as_tensor(times, dtype=zeros.dtype)
+    if torch.is_tensor(this_curves):
+        weight = torch.as_tensor(weight, dtype=this_curves.dtype)
+        times = torch.as_tensor(times, dtype=this_curves.dtype)
         exp = torch.exp
     else:
         exp = np.exp
 
-    rates = zeros[:, lower] * (1.0 - weight) + zeros[:, upper] * weight
+    rates = this_curves[:, lower] * (1.0 - weight) + this_curves[:, upper] * weight
     return exp(-rates * times)
